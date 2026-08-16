@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Gluten Lens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F8F5;
+    --ink:#17241D;
+    --ink-soft:#5A6360;
+    --line:#D8DDD6;
+    --card:#FFFFFF;
+    --red:#B3261E;      --red-bg:#F9E9E7;
+    --amber:#8A5D00;    --amber-bg:#F6ECD2;
+    --green:#1B6B45;    --green-bg:#E4F0E7;
+    --slate:#4C5552;    --slate-bg:#E9ECEA;
+    --radius:18px;
+    --sans:'Archivo',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{font-size:16px}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    min-height:100vh;
+    padding:calc(env(safe-area-inset-top,0px) + 18px) 18px calc(env(safe-area-inset-bottom,0px) + 28px);
+  }
+  .wrap{max-width:520px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  .glyph{width:30px;height:30px;flex:none}
+  .wordmark{font-weight:900;font-size:1.35rem;letter-spacing:-.02em;text-transform:uppercase}
+  .wordmark span{font-weight:400;color:var(--ink-soft)}
+  .tag{margin-left:auto;font-family:var(--mono);font-size:.68rem;color:var(--ink-soft);letter-spacing:.06em}
+
+  /* ---------- viewfinder scan button ---------- */
+  .viewfinder{
+    position:relative;width:100%;aspect-ratio:4/3;
+    background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;
+    cursor:pointer;font-family:var(--sans);color:var(--ink);
+    transition:transform .12s ease;
+  }
+  .viewfinder:active{transform:scale(.985)}
+  .viewfinder:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+  .corner{position:absolute;width:26px;height:26px;border:3px solid var(--ink)}
+  .corner.tl{top:14px;left:14px;border-right:none;border-bottom:none;border-radius:8px 0 0 0}
+  .corner.tr{top:14px;right:14px;border-left:none;border-bottom:none;border-radius:0 8px 0 0}
+  .corner.bl{bottom:14px;left:14px;border-right:none;border-top:none;border-radius:0 0 0 8px}
+  .corner.br{bottom:14px;right:14px;border-left:none;border-top:none;border-radius:0 0 8px 0}
+  .vf-icon{width:44px;height:44px}
+  .vf-label{font-weight:900;font-size:1.15rem;text-transform:uppercase;letter-spacing:.02em}
+  .vf-sub{font-size:.85rem;color:var(--ink-soft)}
+
+  .alt-row{display:flex;justify-content:center;gap:22px;margin-top:14px}
+  .linkbtn{background:none;border:none;font-family:var(--sans);font-size:.88rem;font-weight:600;
+    color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px 2px}
+  .linkbtn:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
+
+  /* ---------- barcode entry ---------- */
+  .barcode-row{display:none;gap:8px;margin-top:14px}
+  .barcode-row.open{display:flex}
+  .barcode-row input{
+    flex:1;min-width:0;padding:13px 14px;font-family:var(--mono);font-size:1rem;
+    border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)
+  }
+  .barcode-row input:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .solid{
+    padding:13px 18px;border:none;border-radius:12px;background:var(--ink);color:var(--paper);
+    font-family:var(--sans);font-weight:600;font-size:.95rem;cursor:pointer
+  }
+  .solid:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+
+  /* ---------- working state ---------- */
+  #working{display:none;text-align:center}
+  .preview{
+    width:100%;max-height:280px;object-fit:cover;border-radius:var(--radius);
+    border:1.5px solid var(--line);display:block;margin-bottom:16px
+  }
+  .scanline{position:relative;overflow:hidden;border-radius:var(--radius)}
+  .scanline::after{
+    content:"";position:absolute;left:0;right:0;top:0;height:3px;background:var(--ink);opacity:.55;
+    animation:scan 2.2s ease-in-out infinite
+  }
+  @keyframes scan{0%{top:4%}50%{top:92%}100%{top:4%}}
+  .status{font-family:var(--mono);font-size:.85rem;color:var(--ink-soft);min-height:1.4em}
+  @media (prefers-reduced-motion: reduce){.scanline::after{animation:none;opacity:0}}
+
+  /* ---------- result ---------- */
+  #result{display:none}
+  .stamp{border-radius:var(--radius);padding:22px 20px;margin-bottom:16px;border:1.5px solid transparent}
+  .stamp .verdict-word{font-weight:900;font-size:clamp(1.7rem,7.5vw,2.3rem);line-height:1.02;
+    text-transform:uppercase;letter-spacing:-.01em;display:flex;align-items:flex-start;gap:10px}
+  .stamp .verdict-word svg{width:.9em;height:.9em;flex:none;margin-top:.12em}
+  .stamp .verdict-sub{margin-top:8px;font-size:.95rem;line-height:1.45}
+  .v-red{background:var(--red-bg);border-color:var(--red)}      .v-red .verdict-word,.v-red .verdict-sub{color:var(--red)}
+  .v-amber{background:var(--amber-bg);border-color:var(--amber)}.v-amber .verdict-word,.v-amber .verdict-sub{color:var(--amber)}
+  .v-green{background:var(--green-bg);border-color:var(--green)}.v-green .verdict-word,.v-green .verdict-sub{color:var(--green)}
+  .v-slate{background:var(--slate-bg);border-color:var(--slate)}.v-slate .verdict-word,.v-slate .verdict-sub{color:var(--slate)}
+
+  .meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:16px;font-size:.85rem;color:var(--ink-soft)}
+  .meta strong{color:var(--ink);font-weight:600}
+  .meta .mono{font-family:var(--mono)}
+
+  .panel{background:var(--card);border:1.5px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:12px}
+  .panel h2{font-size:.7rem;font-weight:900;text-transform:uppercase;letter-spacing:.12em;
+    color:var(--ink-soft);margin-bottom:10px}
+  .finding{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-top:1px solid var(--line)}
+  .finding:first-of-type{border-top:none;padding-top:0}
+  .finding .orig{font-family:var(--mono);font-weight:600;font-size:.92rem}
+  .finding .en{font-size:.88rem}
+  .finding .why{font-size:.8rem;color:var(--ink-soft)}
+  .lvl{display:inline-block;font-size:.62rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;
+    padding:2px 7px;border-radius:99px;margin-right:6px;vertical-align:2px}
+  .lvl.gluten{background:var(--red-bg);color:var(--red)}
+  .lvl.caution{background:var(--amber-bg);color:var(--amber)}
+
+  .fineprint{font-family:var(--mono);font-size:.82rem;line-height:1.7;color:var(--ink);word-break:break-word}
+  .fineprint mark{background:var(--red-bg);color:var(--red);font-weight:600;padding:0 3px;border-radius:3px}
+  .notes{font-size:.88rem;line-height:1.5;color:var(--ink)}
+
+  .actions{display:flex;gap:10px;margin-top:16px}
+  .actions .solid{flex:1;padding:15px;font-size:1rem}
+  .ghost{flex:none;padding:15px 18px;background:none;border:1.5px solid var(--line);border-radius:12px;
+    font-family:var(--sans);font-weight:600;font-size:.95rem;color:var(--ink);cursor:pointer}
+
+  /* ---------- history ---------- */
+  #historySec{margin-top:30px}
+  .hist-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+  .hist-head h2{font-size:.7rem;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-soft)}
+  .hist-head button{background:none;border:none;font-size:.75rem;color:var(--ink-soft);
+    text-decoration:underline;cursor:pointer;font-family:var(--sans)}
+  .hist-item{width:100%;display:flex;align-items:center;gap:10px;text-align:left;background:var(--card);
+    border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;
+    font-family:var(--sans)}
+  .hist-item:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .dot{width:12px;height:12px;border-radius:99px;flex:none}
+  .dot.contains_gluten{background:var(--red)} .dot.caution{background:var(--amber)}
+  .dot.no_gluten_found{background:var(--green)} .dot.unknown{background:var(--slate)}
+  .hist-name{font-size:.9rem;font-weight:600;color:var(--ink);flex:1;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .hist-time{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);flex:none}
+  .hist-empty{font-size:.85rem;color:var(--ink-soft)}
+
+  /* ---------- error + footer ---------- */
+  .errbox{display:none;background:var(--card);border:1.5px solid var(--red);border-radius:var(--radius);
+    padding:16px;margin-top:14px;font-size:.9rem;line-height:1.5}
+  .errbox strong{color:var(--red)}
+  .keycard{display:none;background:var(--card);border:1.5px solid var(--ink);border-radius:var(--radius);
+    padding:16px;margin:0 0 16px}
+  .keycard h3{font-size:.7rem;font-weight:900;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px}
+  .keycard p{font-size:.85rem;line-height:1.5;color:var(--ink)}
+  .keyrow{display:flex;gap:8px;margin-top:10px}
+  .keyrow input{flex:1;min-width:0;padding:12px 13px;font-family:var(--mono);font-size:.9rem;
+    border:1.5px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink)}
+  .keyrow input:focus{outline:2px solid var(--ink);outline-offset:1px}
+  .keynote{margin-top:8px;font-size:.78rem;color:var(--ink-soft)}
+  footer{margin-top:34px;font-size:.74rem;line-height:1.55;color:var(--ink-soft);
+    border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <svg class="glyph" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <path d="M16 4 C13 8 13 12 16 15 C19 12 19 8 16 4 Z" fill="#17241D"/>
+      <path d="M16 12 C13 16 13 20 16 23 C19 20 19 16 16 12 Z" fill="#17241D"/>
+      <path d="M16 23 L16 29" stroke="#17241D" stroke-width="2.4" stroke-linecap="round"/>
+      <line x1="5" y1="27" x2="27" y2="5" stroke="#B3261E" stroke-width="3" stroke-linecap="round"/>
+    </svg>
+    <div class="wordmark">Gluten<span>&nbsp;Lens</span></div>
+    <div class="tag">v4 · any label · any language</div>
+  </header>
+
+  <div class="errbox" id="envBanner" style="margin:0 0 16px"></div>
+
+  <div class="keycard" id="keyCard">
+    <h3>Standalone mode &mdash; one-time setup</h3>
+    <p>This copy runs on your own Anthropic API key (create one at console.anthropic.com &rarr; API Keys, with billing enabled). The key stays on this device only, and a scan costs a cent or two.</p>
+    <div class="keyrow">
+      <input id="keyInput" type="password" autocomplete="off" spellcheck="false"
+             placeholder="sk-ant-..." aria-label="Anthropic API key">
+      <button class="solid" id="keySave">Save</button>
+    </div>
+    <p class="keynote" id="keyNote"></p>
+  </div>
+
+  <!-- ============ HOME ============ -->
+  <section id="home">
+    <button class="viewfinder" id="scanBtn" aria-label="Take a photo of an ingredient label or barcode">
+      <span class="corner tl"></span><span class="corner tr"></span>
+      <span class="corner bl"></span><span class="corner br"></span>
+      <svg class="vf-icon" viewBox="0 0 24 24" fill="none" stroke="#17241D" stroke-width="1.7" aria-hidden="true">
+        <path d="M4 8 C4 6.9 4.9 6 6 6 H8 L9.5 4 H14.5 L16 6 H18 C19.1 6 20 6.9 20 8 V17 C20 18.1 19.1 19 18 19 H6 C4.9 19 4 18.1 4 17 Z"/>
+        <circle cx="12" cy="12.5" r="3.4"/>
+      </svg>
+      <span class="vf-label">Scan a label</span>
+      <span class="vf-sub">ingredient list or barcode — it figures out which</span>
+    </button>
+
+    <div class="alt-row">
+      <button class="linkbtn" id="galleryBtn">Choose from photos</button>
+      <button class="linkbtn" id="barcodeToggle">Type a barcode</button>
+      <button class="linkbtn" id="keyToggle" style="display:none">API key</button>
+    </div>
+
+    <div class="barcode-row" id="barcodeRow">
+      <input id="barcodeInput" inputmode="numeric" pattern="[0-9]*" placeholder="e.g. 4000417025005"
+             aria-label="Barcode number">
+      <button class="solid" id="barcodeGo">Look up</button>
+    </div>
+
+    <div class="errbox" id="errBox"></div>
+
+    <section id="historySec">
+      <div class="hist-head">
+        <h2>Recent scans</h2>
+        <button id="clearHist" style="display:none">clear</button>
+      </div>
+      <div id="histList"><p class="hist-empty">Scans you make will be saved here.</p></div>
+    </section>
+  </section>
+
+  <!-- ============ WORKING ============ -->
+  <section id="working">
+    <div class="scanline" id="scanlineBox">
+      <img class="preview" id="previewImg" alt="Photo being analyzed" style="display:none">
+    </div>
+    <p class="status" id="statusText">Reading the label…</p>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section id="result">
+    <div class="stamp" id="stamp">
+      <div class="verdict-word" id="verdictWord"></div>
+      <div class="verdict-sub" id="verdictSub"></div>
+    </div>
+
+    <div class="meta" id="metaRow"></div>
+
+    <div class="panel" id="findingsPanel" style="display:none">
+      <h2>What was found</h2>
+      <div id="findingsList"></div>
+    </div>
+
+    <div class="panel" id="ingredientsPanel" style="display:none">
+      <h2>Ingredients, translated</h2>
+      <div class="fineprint" id="ingredientsText"></div>
+    </div>
+
+    <div class="panel" id="notesPanel" style="display:none">
+      <h2>Notes</h2>
+      <p class="notes" id="notesText"></p>
+    </div>
+
+    <div class="actions">
+      <button class="solid" id="againBtn">Scan another</button>
+      <button class="ghost" id="homeBtn">Done</button>
+    </div>
+  </section>
+
+  <footer>
+    Gluten Lens is an AI reading of a photo or a web listing — it can misread small print, and packaging
+    changes. For celiac-level safety, treat <em>caution</em> as a no, and let a certified gluten-free mark
+    on the package outrank anything said here.
+  </footer>
+</div>
+
+<input type="file" id="camInput" accept="image/*" capture="environment" hidden>
+<input type="file" id="galleryInput" accept="image/*" hidden>
+
+<script>
+/* ================= constants ================= */
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MODEL = "claude-sonnet-4-6";
+const HISTORY_KEY = "gluten_scans";
+// Two ways this app can reach the AI:
+//  1. Inside Claude (claude.ai / Claude app): calls are proxied and signed automatically.
+//  2. Standalone (downloaded file or self-hosted): calls go direct using the user's own API key.
+const CLAUDE_HOSTS = /claudeusercontent\.com$|claude\.ai$|claude\.com$/;
+const IN_CLAUDE = (location.protocol === 'https:' || location.protocol === 'http:')
+  && (CLAUDE_HOSTS.test(location.hostname) || location.hostname === '');
+const KEY_KEY = 'gl_api_key';
+let apiKey = null;
+
+/* storage shim: window.storage inside Claude, localStorage standalone, memory as last resort */
+const memStore = {};
+const store = {
+  async get(k){
+    if(window.storage && window.storage.get){
+      try{ const r = await window.storage.get(k); return r ? r.value : null; }catch(e){ return null; }
+    }
+    try{ return localStorage.getItem(k); }catch(e){ return (k in memStore) ? memStore[k] : null; }
+  },
+  async set(k,v){
+    if(window.storage && window.storage.set){
+      try{ await window.storage.set(k, v); }catch(e){}
+      return;
+    }
+    try{ localStorage.setItem(k, v); }catch(e){ memStore[k] = v; }
+  }
+};
+
+const SCHEMA = `{
+ "type": "label" | "barcode_only" | "unreadable",
+ "product": string or null,
+ "lang": string or null (language of the label, in English, e.g. "German"),
+ "barcode": string or null (digits printed under a barcode, if visible),
+ "verdict": "contains_gluten" | "caution" | "no_gluten_found" | "unknown",
+ "confidence": "high" | "medium" | "low",
+ "findings": [ { "orig": "term as printed", "en": "English meaning", "level": "gluten" | "caution", "why": "short reason" } ],
+ "may_contain": string or null ("may contain" / shared-facility statements, translated),
+ "ingredients_en": string or null (full ingredient list translated to English, <=120 words, with every gluten or caution term wrapped in **double asterisks**),
+ "notes": string or null (1-2 short sentences max),
+ "source": string or null (where info came from, for web lookups)
+}`;
+
+const GLUTEN_RULES = `Gluten rules (be conservative — this protects someone's health):
+- Definite gluten: wheat in all forms (spelt, kamut/khorasan, durum, semolina, farina, farro, einkorn, emmer, bulgur, couscous, seitan, wheat starch unless explicitly gluten-free), barley (including malt, malt extract/flavoring/syrup, malt vinegar, brewer's yeast), rye, triticale.
+- Caution: oats unless certified gluten-free; unspecified "starch"/"modified food starch" outside the EU; dextrin of unknown source; hydrolyzed vegetable/plant protein; soy sauce (usually wheat); "flour" of unstated grain; glucose/maltodextrin from wheat is generally tolerated but note it.
+- Any "may contain wheat/gluten" or shared-line statement caps the verdict at "caution".
+- "no_gluten_found" only if the full ingredient list is readable and clean. If parts are unreadable, say so and use "caution" or "unknown".
+- EU labels bold or emphasize allergens; treat emphasized grain words as significant.`;
+
+const LABEL_SYSTEM = `You are the analysis engine inside a gluten-checking app for one person who must avoid gluten. You receive one photo of a food product: usually an ingredient label (any language), sometimes a barcode.
+
+Respond with ONLY a valid JSON object — no markdown, no backticks, no text before or after. Schema:
+${SCHEMA}
+
+${GLUTEN_RULES}
+
+If the photo shows a readable ingredient list: type "label", translate and judge it.
+If it shows ONLY a barcode (no ingredient text): type "barcode_only", put the digits printed beneath the bars into "barcode", verdict "unknown".
+If neither is readable: type "unreadable", verdict "unknown", and say in notes what would help (closer photo, better light).
+Keep every field concise.`;
+
+const BARCODE_SYSTEM = `You are the lookup engine inside a gluten-checking app for one person who must avoid gluten. You are given a product barcode. Use web search to identify the product and its ingredient list — Open Food Facts (world.openfoodfacts.org), manufacturer pages, and grocery listings are good sources.
+
+Respond with ONLY a valid JSON object — no markdown, no backticks, no text before or after. Schema:
+${SCHEMA}
+
+${GLUTEN_RULES}
+
+Extra rules for lookups:
+- type is "label" if you found the product, "unreadable" if not.
+- Set "source" to where the ingredients came from.
+- Database ingredients can be outdated; cap confidence at "medium" and remind in notes to compare with the printed label.
+- If the product cannot be found, verdict "unknown" and suggest photographing the ingredient label instead.`;
+
+/* ================= tiny helpers ================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const VERDICTS = {
+  contains_gluten:{cls:'v-red',  word:'Contains gluten', icon:'cross'},
+  caution:        {cls:'v-amber',word:'Caution',         icon:'warn'},
+  no_gluten_found:{cls:'v-green',word:'No gluten found', icon:'check'},
+  unknown:        {cls:'v-slate',word:"Couldn't tell",   icon:'question'}
+};
+const ICONS = {
+  cross:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>',
+  warn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 L22 20 H2 Z"/><path d="M12 9 v5"/><path d="M12 17.2 v.1"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 L10 18.5 L20 6.5"/></svg>',
+  question:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 9 a3 3 0 1 1 4.2 2.8 c-1 .5-1.2 1.2-1.2 2.2"/><path d="M12 17.4 v.1"/></svg>'
+};
+
+let statusTimer = null;
+function setView(name){
+  ['home','working','result'].forEach(v => $(v).style.display = v===name ? 'block' : 'none');
+  if(name!=='working' && statusTimer){ clearInterval(statusTimer); statusTimer=null; }
+  window.scrollTo(0,0);
+}
+function showError(msg){
+  const box = $('errBox');
+  box.innerHTML = '<strong>That didn\u2019t go through.</strong> ' + esc(msg);
+  box.style.display = 'block';
+  setView('home');
+}
+function startStatus(lines){
+  const el = $('statusText');
+  let i = 0;
+  el.textContent = lines[0];
+  if(statusTimer) clearInterval(statusTimer);
+  statusTimer = setInterval(()=>{ i = Math.min(i+1, lines.length-1); el.textContent = lines[i]; }, 4500);
+}
+
+/* ================= image handling ================= */
+const API_IMAGE_TYPES = ['image/jpeg','image/png','image/webp','image/gif'];
+
+function unreadableMsg(file, trail){
+  const t = ((file && file.type) || '').toLowerCase();
+  const n = ((file && file.name) || '').toLowerCase();
+  if(t.includes('heic') || t.includes('heif') || n.endsWith('.heic') || n.endsWith('.heif')){
+    return 'This photo is saved as HEIC/HEIF, which neither this browser nor the AI can open. In your camera settings, switch the picture format to \u201cmost compatible\u201d / JPEG, then retake the shot.';
+  }
+  const bits = [];
+  bits.push(t || 'unknown type');
+  if(file && file.size) bits.push((file.size/1048576).toFixed(1) + ' MB');
+  bits.push(IN_CLAUDE ? 'in Claude' : 'standalone');
+  if(trail && trail.length) bits.push('steps: ' + trail.join(' \u2192 '));
+  return 'Could not read that image [v4 \u00b7 ' + bits.join(' \u00b7 ') +
+         ']. Screenshot this message for Claude \u2014 it pinpoints the cause.';
+}
+
+function readAsDataURL(file){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>res(fr.result);
+    fr.onerror = ()=>rej(new Error('filereader-failed'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function decodeImage(file, trail){
+  // Layer 1: createImageBitmap decodes straight from the file — no URLs, so no
+  // sandbox/CSP interference — and honors EXIF rotation in modern browsers.
+  if(window.createImageBitmap){
+    try{ return await createImageBitmap(file, { imageOrientation:'from-image' }); }
+    catch(e){ trail.push('bitmap1:' + (e.name || 'fail')); }
+    try{ return await createImageBitmap(file); }
+    catch(e){ trail.push('bitmap2:' + (e.name || 'fail')); }
+  } else trail.push('no-bitmap-api');
+  // Layer 2: read the file into a data: URL (avoids blob: restrictions) and load via <img>.
+  let dataUrl = null;
+  try{ dataUrl = await readAsDataURL(file); }
+  catch(e){ trail.push('reader:fail'); }
+  if(!dataUrl) throw new Error('decode-failed');
+  return await new Promise((res, rej)=>{
+    const img = new Image();
+    img.onload = ()=>res(img);
+    img.onerror = ()=>{ trail.push('img:fail'); rej(new Error('decode-failed')); };
+    img.src = dataUrl;
+  });
+}
+
+/* Returns { base64, mediaType, dataUrl } ready for the API. */
+async function prepareImage(file, maxDim=1568, quality=0.85){
+  const trail = [];
+  try{
+    const src = await decodeImage(file, trail);
+    const w0 = src.width || src.naturalWidth, h0 = src.height || src.naturalHeight;
+    if(!w0 || !h0) throw new Error('zero-size');
+    const scale = Math.min(1, maxDim/Math.max(w0, h0));
+    const w = Math.max(1, Math.round(w0*scale)), h = Math.max(1, Math.round(h0*scale));
+    const c = document.createElement('canvas'); c.width=w; c.height=h;
+    c.getContext('2d').drawImage(src, 0, 0, w, h);
+    if(src.close) src.close();
+    const dataUrl = c.toDataURL('image/jpeg', quality);
+    if(!dataUrl || dataUrl.length < 100) throw new Error('empty-canvas');
+    return { base64: dataUrl.split(',')[1], mediaType: 'image/jpeg', dataUrl };
+  }catch(e){
+    trail.push('canvas:' + (e.message || e.name || 'fail'));
+  }
+  // Layer 3, last resort: the browser can't decode it, but if it's a format the AI
+  // accepts and it's small enough, hand the untouched file straight through.
+  const t = ((file && file.type) || '').toLowerCase();
+  if(API_IMAGE_TYPES.includes(t) && file.size <= 4.5*1048576){
+    try{
+      const dataUrl = await readAsDataURL(file);
+      trail.push('raw-passthrough');
+      return { base64: dataUrl.split(',')[1], mediaType: t, dataUrl };
+    }catch(e){ trail.push('raw:fail'); }
+  }
+  throw new Error(unreadableMsg(file, trail));
+}
+
+/* ================= API calls ================= */
+async function callClaude(body){
+  if(!IN_CLAUDE && !apiKey){
+    revealKeyCard();
+    throw new Error('This standalone copy needs your Anthropic API key once \u2014 see the setup card at the top.');
+  }
+  const headers = {'Content-Type':'application/json'};
+  if(!IN_CLAUDE){
+    headers['x-api-key'] = apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  }
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), 120000);
+  let resp;
+  try{
+    resp = await fetch(API_URL, {
+      method:'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  }catch(e){
+    clearTimeout(t);
+    if(e.name==='AbortError') throw new Error('The check timed out. Try again.');
+    throw new Error('Could not reach the AI. Check your connection and try again.');
+  }
+  clearTimeout(t);
+  const data = await resp.json().catch(()=>null);
+  if(resp.status===401 || resp.status===403){
+    throw new Error(IN_CLAUDE
+      ? 'Claude didn\u2019t recognize this session. Make sure you\u2019re signed in to Claude and opened the app from the chat or its claude.ai link.'
+      : 'The API rejected that key. Tap \u201cAPI key\u201d up top to re-enter it, and check that billing is set up at console.anthropic.com.');
+  }
+  if(!resp.ok || !data || data.error){
+    throw new Error((data && data.error && data.error.message) || ('Service error ('+resp.status+'). Try again in a moment.'));
+  }
+  const text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n');
+  return extractJSON(text);
+}
+function extractJSON(text){
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if(s===-1 || e===-1) throw new Error('The analysis came back in an unexpected shape. Try again.');
+  return JSON.parse(text.slice(s, e+1));
+}
+
+async function analyzePhoto(base64, mediaType){
+  return callClaude({
+    model: MODEL, max_tokens: 1000, system: LABEL_SYSTEM,
+    messages:[{ role:'user', content:[
+      { type:'image', source:{ type:'base64', media_type: mediaType || 'image/jpeg', data: base64 } },
+      { type:'text', text:'Analyze this photo per your instructions. JSON only.' }
+    ]}]
+  });
+}
+async function lookupBarcode(digits){
+  return callClaude({
+    model: MODEL, max_tokens: 1000, system: BARCODE_SYSTEM,
+    messages:[{ role:'user', content:
+      'Barcode: ' + digits + '. Find this product and its ingredient list, then judge it for gluten. JSON only.' }],
+    tools:[{ type:'web_search_20250305', name:'web_search' }]
+  });
+}
+
+/* ================= flows ================= */
+async function handleFile(file){
+  if(!file) return;
+  $('errBox').style.display='none';
+  let prepared;
+  try{ prepared = await prepareImage(file); }
+  catch(e){ showError(e.message || 'Could not read that photo.'); return; }
+
+  const img = $('previewImg');
+  img.onerror = ()=>{ img.style.display='none'; };
+  img.src = prepared.dataUrl; img.style.display='block';
+  setView('working');
+  startStatus(['Reading the label…','Translating ingredients…','Checking against gluten sources…','Almost there…']);
+
+  try{
+    let result = await analyzePhoto(prepared.base64, prepared.mediaType);
+    if(result.type==='barcode_only' && result.barcode && /^\d{6,14}$/.test(String(result.barcode).replace(/\s/g,''))){
+      const digits = String(result.barcode).replace(/\s/g,'');
+      startStatus(['Found barcode '+digits+' — searching the web…','Checking Open Food Facts and stores…','Reading what came back…']);
+      result = await lookupBarcode(digits);
+      if(!result.barcode) result.barcode = digits;
+    }
+    await showResult(result, true);
+  }catch(e){ showError(e.message); }
+}
+
+async function handleBarcodeEntry(){
+  const digits = $('barcodeInput').value.replace(/\D/g,'');
+  if(digits.length < 6){ showError('That barcode looks too short — most are 8 to 13 digits.'); return; }
+  $('errBox').style.display='none';
+  $('previewImg').style.display='none';
+  setView('working');
+  startStatus(['Searching the web for '+digits+'…','Checking Open Food Facts and stores…','Reading what came back…']);
+  try{
+    const result = await lookupBarcode(digits);
+    if(!result.barcode) result.barcode = digits;
+    await showResult(result, true);
+  }catch(e){ showError(e.message); }
+}
+
+/* ================= rendering ================= */
+async function showResult(r, save){
+  const v = VERDICTS[r.verdict] || VERDICTS.unknown;
+  const stamp = $('stamp');
+  stamp.className = 'stamp ' + v.cls;
+  $('verdictWord').innerHTML = ICONS[v.icon] + '<span>' + esc(v.word) + '</span>';
+
+  const culprits = (r.findings||[]).filter(f=>f.level==='gluten').map(f=>f.en||f.orig);
+  let sub = '';
+  if(r.verdict==='contains_gluten') sub = culprits.length ? culprits.slice(0,3).join(', ') : 'A gluten ingredient was identified.';
+  else if(r.verdict==='caution') sub = r.may_contain ? r.may_contain : 'Something here needs a second look.';
+  else if(r.verdict==='no_gluten_found') sub = 'Nothing on this list matched a gluten source.';
+  else sub = (r.notes || 'Not enough to go on.');
+  $('verdictSub').textContent = sub;
+
+  const meta = [];
+  if(r.product) meta.push('<span><strong>'+esc(r.product)+'</strong></span>');
+  if(r.lang) meta.push('<span>label in '+esc(r.lang)+'</span>');
+  if(r.barcode) meta.push('<span class="mono">'+esc(r.barcode)+'</span>');
+  if(r.confidence) meta.push('<span>confidence: '+esc(r.confidence)+'</span>');
+  if(r.source) meta.push('<span>via '+esc(r.source)+'</span>');
+  $('metaRow').innerHTML = meta.join('');
+
+  const fl = $('findingsList');
+  const findings = (r.findings||[]).slice(0,8);
+  if(findings.length){
+    fl.innerHTML = findings.map(f=>
+      '<div class="finding">'+
+        '<span class="orig"><span class="lvl '+(f.level==='gluten'?'gluten':'caution')+'">'+(f.level==='gluten'?'gluten':'caution')+'</span>'+esc(f.orig||'')+'</span>'+
+        (f.en && f.en!==f.orig ? '<span class="en">= '+esc(f.en)+'</span>' : '')+
+        (f.why ? '<span class="why">'+esc(f.why)+'</span>' : '')+
+      '</div>').join('');
+    $('findingsPanel').style.display='block';
+  } else $('findingsPanel').style.display='none';
+
+  if(r.ingredients_en){
+    let html = esc(r.ingredients_en);
+    html = html.replace(/\*\*(.+?)\*\*/g, '<mark>$1</mark>');
+    let extra = r.may_contain ? '<br><br>' + esc(r.may_contain) : '';
+    $('ingredientsText').innerHTML = html + extra;
+    $('ingredientsPanel').style.display='block';
+  } else $('ingredientsPanel').style.display='none';
+
+  if(r.notes){ $('notesText').textContent = r.notes; $('notesPanel').style.display='block'; }
+  else $('notesPanel').style.display='none';
+
+  setView('result');
+
+  if(save){
+    try{
+      const list = await loadHistory();
+      list.unshift({ t: Date.now(), product: r.product || (r.barcode ? 'Barcode '+r.barcode : 'Unnamed scan'),
+                     verdict: r.verdict || 'unknown', data: r });
+      await store.set(HISTORY_KEY, JSON.stringify(list.slice(0,20)));
+    }catch(e){ /* history is best-effort */ }
+    renderHistory();
+  }
+}
+
+/* ================= history ================= */
+async function loadHistory(){
+  try{
+    const raw = await store.get(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function timeAgo(t){
+  const d = Date.now()-t, m=60000, h=3.6e6, day=8.64e7;
+  if(d<m) return 'now';
+  if(d<h) return Math.floor(d/m)+'m ago';
+  if(d<day) return Math.floor(d/h)+'h ago';
+  if(d<7*day) return Math.floor(d/day)+'d ago';
+  return new Date(t).toLocaleDateString();
+}
+async function renderHistory(){
+  const list = await loadHistory();
+  const el = $('histList');
+  $('clearHist').style.display = list.length ? 'inline' : 'none';
+  if(!list.length){ el.innerHTML = '<p class="hist-empty">Scans you make will be saved here.</p>'; return; }
+  el.innerHTML = list.map((it,i)=>
+    '<button class="hist-item" data-i="'+i+'">'+
+      '<span class="dot '+esc(it.verdict)+'"></span>'+
+      '<span class="hist-name">'+esc(it.product)+'</span>'+
+      '<span class="hist-time">'+timeAgo(it.t)+'</span>'+
+    '</button>').join('');
+  el.querySelectorAll('.hist-item').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const items = await loadHistory();
+      const it = items[Number(btn.dataset.i)];
+      if(it && it.data) showResult(it.data, false);
+    });
+  });
+}
+
+/* ================= wiring ================= */
+$('scanBtn').addEventListener('click', ()=> $('camInput').click());
+$('galleryBtn').addEventListener('click', ()=> $('galleryInput').click());
+$('camInput').addEventListener('change', e=>{ handleFile(e.target.files[0]); e.target.value=''; });
+$('galleryInput').addEventListener('change', e=>{ handleFile(e.target.files[0]); e.target.value=''; });
+
+$('barcodeToggle').addEventListener('click', ()=>{
+  const row = $('barcodeRow');
+  row.classList.toggle('open');
+  if(row.classList.contains('open')) $('barcodeInput').focus();
+});
+$('barcodeGo').addEventListener('click', handleBarcodeEntry);
+$('barcodeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') handleBarcodeEntry(); });
+
+$('againBtn').addEventListener('click', ()=>{ setView('home'); $('camInput').click(); });
+$('homeBtn').addEventListener('click', ()=> setView('home'));
+$('clearHist').addEventListener('click', async ()=>{
+  try{ await store.set(HISTORY_KEY, '[]'); }catch(e){}
+  renderHistory();
+});
+
+/* ---- standalone-mode key handling ---- */
+function revealKeyCard(){
+  $('keyCard').style.display = 'block';
+  try{ $('keyInput').focus(); }catch(e){}
+}
+if(!IN_CLAUDE){
+  $('keyToggle').style.display = 'inline';
+  try{ apiKey = localStorage.getItem(KEY_KEY); }catch(e){ apiKey = null; }
+  if(!apiKey) revealKeyCard();
+}
+$('keyToggle').addEventListener('click', revealKeyCard);
+$('keySave').addEventListener('click', ()=>{
+  const k = $('keyInput').value.trim();
+  if(!k.startsWith('sk-ant-')){
+    $('keyNote').textContent = 'That doesn\u2019t look right \u2014 Anthropic keys start with sk-ant-.';
+    return;
+  }
+  apiKey = k;
+  let persisted = true;
+  try{ localStorage.setItem(KEY_KEY, k); }catch(e){ persisted = false; }
+  $('keyInput').value = '';
+  $('keyNote').textContent = '';
+  $('keyCard').style.display = 'none';
+  if(!persisted){
+    const b = $('envBanner');
+    b.innerHTML = '<strong>Key saved for this session only.</strong> This device won\u2019t let a downloaded file store data, so you\u2019ll paste the key again next time. Hosting the file (free) fixes that \u2014 ask Claude how.';
+    b.style.display = 'block';
+  }
+});
+
+renderHistory();
+</script>
+</body>
+</html>
